@@ -1,6 +1,6 @@
 from adapters import repository
 import pytest
-from service_layer import services
+from service_layer import services, unit_of_work
 from domain.model import OrderLine, Batch, allocate
 from datetime import date, timedelta
 
@@ -28,6 +28,17 @@ class FakeSession():
 
     def commit(self):
         self.commited = True
+
+class FakeUnitOfWork(unit_of_work.AbstractUnitOfWork):
+    def __init__(self):
+        self.batches = FakeRepository([])
+        self.committed = False
+
+    def commit(self):
+        self.committed = True
+    
+    def rollback(self):
+        pass
 
 tomorrow = date(2021, 1, 2)    # Arbitrary date
 
@@ -73,15 +84,15 @@ def test_prefers_warehouse_batches_to_shipments():
     assert shipment_batch.available_quantity == 100
 
 def test_add_batch():
-    repo, session = FakeRepository([]), FakeSession()
-    services.add_batch("b1", "CRUNCHY-ARMCHAIR", 100, None, repo, session)
-    assert repo.get("b1") is not None
-    assert session.commited
+    uow = FakeUnitOfWork()
+    services.add_batch("b1", "CRUNCHY-ARMCHAIR", 100, None, uow)
+    assert uow.get("b1") is not None
+    assert uow.commited
 
 def test_allocate_returns_allocation():
-    repo, session = FakeRepository([]), FakeSession()
-    services.add_batch("batch1", "COMPLICATED-LAMP", 100, None, repo, session)
-    result = services.allocate("o1", "COMPLICATED-LAMP", 10, repo, session)
+    uow = FakeUnitOfWork()
+    services.add_batch("batch1", "COMPLICATED-LAMP", 100, None, uow)
+    result = services.allocate("o1", "COMPLICATED-LAMP", 10, uow)
     assert result == "batch1"
 
 def test_allocate_errors_for_invalid_sku():
